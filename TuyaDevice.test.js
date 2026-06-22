@@ -25,7 +25,7 @@ export default class TuyaDevice extends TuyaEncryptor
         this.deviceType      = deviceData.hasOwnProperty('deviceType') ? deviceData.deviceType : 0;
         this.localKey        = deviceData.hasOwnProperty('localKey') ? deviceData.localKey : null;
 
-        this.name            = this.getName();
+        this.name            = deviceData.name?.trim() || this.getName();
 
         this.ip              = deviceData.ip;
         this.uuid            = deviceData.uuid;
