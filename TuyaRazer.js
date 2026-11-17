@@ -77,6 +77,18 @@ export function DiscoveryService()
         this.negotiator = new TuyaNegotiator();
         this.broadcast = new TuyaBroadcast();
         this.broadcast.on('broadcast.device', this.handleTuyaDiscovery.bind(this));
+        const cachedDeviceJson = service.getSetting('staticDevices', 'data');
+        if (cachedDeviceJson)
+        {
+            try
+            {
+                const cachedDevices = JSON.parse(cachedDeviceJson);
+                for (const cachedDevice of cachedDevices) this.handleTuyaDiscovery(cachedDevice);
+            } catch(ex)
+            {
+                service.log('Failed to load static Tuya devices: ' + ex);
+            }
+        }
     }
 
     this.handleTuyaDiscovery = function(data)
