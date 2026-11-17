@@ -5,6 +5,7 @@ import { AES } from "./Crypto/AES.test.js";
 import { Hex } from "./Crypto/Hex.test.js";
 import { Utf8 } from "./Crypto/Utf8.test.js";
 import { GCM } from "./Crypto/lib/algorithm/cipher/mode/GCM.test.js";
+import { ECB } from "./Crypto/lib/algorithm/cipher/mode/ECB.test.js";
 import { Word32Array } from "./Crypto/lib/Word32Array.test.js";
 import { Base64 } from "./Crypto/lib/encoder/Base64.test.js";
 
@@ -13,17 +14,22 @@ export default class TuyaBroadcast extends BaseClass
     constructor()
     {
         super();
-        this.port = 6667;
+        this.ports = [6666, 6667];
         this.key = MD5.hash('yGAdlopoPVldABfn');
-        this.socket = udp.createSocket();
+        this.sockets = [];
         this.init();
     }
 
     init()
     {
-        this.socket.bind(this.port);
-        this.socket.on('message', this.handleBroadcast.bind(this));
-        this.socket.on('error', service.log);
+        for (const port of this.ports)
+        {
+            const socket = udp.createSocket();
+            socket.bind(port);
+            socket.on('message', this.handleBroadcast.bind(this));
+            socket.on('error', service.log);
+            this.sockets.push(socket);
+        }
     }
 
     handleBroadcast(message)
@@ -34,8 +40,7 @@ export default class TuyaBroadcast extends BaseClass
 
         if (this.equals(prefix, new Uint8Array([0x00, 0x00, 0x55, 0xAA]))) // Protocol up to 3.3
         {
-            // service.log('Old device detected');
-            // decryptedData = this.decryptECB(data);
+            tuyaDeviceData = this.decryptECB(data);
         } else if (this.equals(prefix, new Uint8Array([0x00, 0x00, 0x66, 0x99]))) // Protocol 3.4+
         {
             tuyaDeviceData = this.decryptGCM(data);
@@ -53,15 +58,19 @@ export default class TuyaBroadcast extends BaseClass
 
     decryptECB(data)
     {
-        // Create a decipher object using AES algorithm and ECB mode
-        const decipher = crypto.createDecipheriv('aes-128-ecb', this.key, '');
-    
-        // Decrypt the message
-        let decrypted = decipher.update(data.slice(20, -8), undefined, 'utf8');
-        decrypted += decipher.final('utf8');
-    
-        // Unpad the decrypted message
-        return JSON.parse(decrypted);
+        try {
+            const payload = new Word32Array(data.slice(20, -8));
+            const decrypted = AES.decrypt(payload.toString(Base64), this.key, {mode: ECB});
+            const text = decrypted.toString(Utf8);
+            const jsonStart = text.indexOf('{');
+            const jsonEnd = text.lastIndexOf('}');
+            if (jsonStart < 0 || jsonEnd < jsonStart) return false;
+            return JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+        } catch(ex)
+        {
+            service.log('Failed to decode Tuya 3.3 discovery packet: ' + ex);
+            return false;
+        }
     }
 
     toHexString(byteArray)
